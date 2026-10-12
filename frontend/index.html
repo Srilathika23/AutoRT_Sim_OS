@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1020" />
+    <title>AutoRT-Sim | Real-Time Scheduling Simulator</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/gantt.js" defer></script>
+    <script src="/charts.js" defer></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#simulate" aria-label="AutoRT-Sim home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 40 40" role="img"><path d="M20 3 35 11.5v17L20 37 5 28.5v-17L20 3Z"/><path d="M11 24.5h18M13 20.5l2-5h10l2 5M13 20.5h14v4H13zM16 24.5v2m8-2v2"/></svg>
+          </span>
+          <span class="brand-copy"><strong>AutoRT-Sim</strong><small>Real-Time Scheduling Simulator for Autonomous Driving</small></span>
+        </a>
+        <div class="header-actions">
+          <span class="connection-state" id="connectionState"><i></i><span>Connecting</span></span>
+          <button class="button button-quiet" id="demoShortcut" type="button" title="Load workload and run priority inversion demo">Demo</button>
+          <button class="button button-quiet" id="presentationButton" type="button" aria-pressed="false" title="Toggle presentation mode">Presentation mode</button>
+        </div>
+      </header>
+
+      <main class="main-content">
+        <nav class="tabs" role="tablist" aria-label="Simulator views">
+          <button class="tab is-active" id="tab-simulate" role="tab" aria-selected="true" aria-controls="panel-simulate" data-tab="simulate">Simulate</button>
+          <button class="tab" id="tab-compare" role="tab" aria-selected="false" aria-controls="panel-compare" data-tab="compare">Compare</button>
+          <button class="tab" id="tab-demo" role="tab" aria-selected="false" aria-controls="panel-demo" data-tab="demo">Priority Inversion Demo</button>
+          <button class="tab" id="tab-about" role="tab" aria-selected="false" aria-controls="panel-about" data-tab="about">About</button>
+          <span class="tab-underline" aria-hidden="true"></span>
+        </nav>
+
+        <section id="panel-simulate" class="tab-panel is-active" role="tabpanel" aria-labelledby="tab-simulate">
+          <div id="loadingSkeleton" class="loading-skeleton" role="status" aria-label="Loading simulator"><i></i><i></i><i></i></div>
+          <div class="editor-grid editor-only">
+            <section class="surface control-surface" aria-labelledby="run-heading">
+              <div class="section-heading"><div><p class="eyebrow">Simulation setup</p><h1 id="run-heading">Schedule a workload</h1></div><span class="live-chip"><i></i> Discrete time</span></div>
+              <div class="control-grid">
+                <label class="field algorithm-field"><span>Scheduling algorithm</span><select id="algorithmSelect" aria-label="Scheduling algorithm"></select><small id="algorithmBadge" class="field-note"></small></label>
+                <label class="field extra-param hidden" id="quantumWrap"><span>Time quantum</span><input id="quantumInput" type="number" min="1" value="2" /></label>
+                <label class="field extra-param hidden" id="agingWrap"><span>Aging interval</span><input id="agingInput" type="number" min="1" value="5" /></label>
+                <label class="field extra-param hidden" id="boostWrap"><span>MLFQ boost interval</span><input id="boostInput" type="number" min="1" value="20" /></label>
+                <label class="field duration-field"><span>Duration <em>ticks</em></span><input id="simLengthInput" type="number" min="1" max="1000" value="100" /></label>
+                <label class="switch-control"><span><strong>Priority inheritance</strong><small>Boost mutex owners for waiting jobs</small></span><input id="inheritanceToggle" type="checkbox" role="switch" aria-label="Priority inheritance" /><i aria-hidden="true"></i></label>
+                <button id="runButton" class="button button-primary run-button" type="button"><span class="button-spinner" aria-hidden="true"></span><span class="button-label">Run simulation</span><span aria-hidden="true">→</span></button>
+              </div>
+              <div id="simulateError" class="notice notice-error hidden" role="alert"></div>
+              <div id="utilizationWarning" class="notice notice-warning hidden" role="status"></div>
+            </section>
+
+            <section class="surface task-editor editor-only" aria-labelledby="tasks-heading">
+              <div class="section-heading task-heading"><div><p class="eyebrow">Vehicle workload</p><h2 id="tasks-heading">Periodic tasks <span id="taskCount" class="count-chip">0</span></h2></div><div class="toolbar-actions"><button class="button button-quiet" id="resetTasksButton" type="button">Reset defaults</button><button class="button button-secondary" id="addRowButton" type="button"><span aria-hidden="true">＋</span> Add task</button></div></div>
+              <div class="table-scroll"><table id="taskTable" class="data-table task-table"><thead><tr><th scope="col">Task</th><th scope="col">Period</th><th scope="col">Exec</th><th scope="col">Deadline</th><th scope="col">Criticality</th><th scope="col" class="advanced-column">Priority</th><th scope="col" class="advanced-column">Resource</th><th scope="col" class="advanced-column">Hold</th><th scope="col" class="advanced-column">Offset</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody></tbody></table></div>
+              <details class="advanced-toggle" id="advancedFields"><summary>Advanced task fields <span>priority · mutex · release offset</span></summary></details>
+              <p class="validation-message hidden" id="taskValidation" role="alert"></p>
+            </section>
+          </div>
+
+          <section id="simulateResults" class="results-section hidden" aria-live="polite">
+            <div class="results-toolbar"><div><p class="eyebrow">Run output</p><h2 id="resultTitle">Schedule results</h2></div><div class="toolbar-actions"><button class="button button-quiet" id="exportJsonButton" type="button" title="Export result JSON">↓ JSON</button><button class="button button-quiet" id="exportPngButton" type="button" title="Export Gantt as PNG">▧ PNG</button></div></div>
+            <div id="statsGrid" class="stats-grid">
+              <article class="stat-card stat-misses"><div class="stat-top"><span>Deadline misses</span><span class="stat-icon" aria-hidden="true">×</span></div><strong id="missesStat" class="stat-value">0</strong><small>unfinished at deadline</small></article>
+              <article class="stat-card"><div class="stat-top"><span>Miss ratio</span><span class="stat-icon stat-violet" aria-hidden="true">%</span></div><strong id="missRatioStat" class="stat-value">0.0%</strong><small>of released jobs</small></article>
+              <article class="stat-card stat-util"><div class="stat-top"><span>CPU utilization</span><span id="utilRing" class="progress-ring" aria-hidden="true"><svg viewBox="0 0 40 40"><circle class="ring-track" cx="20" cy="20" r="16"/><circle class="ring-value" cx="20" cy="20" r="16"/></svg></span></div><strong id="utilizationStat" class="stat-value">0.0%</strong><small>simulated CPU time</small></article>
+              <article class="stat-card"><div class="stat-top"><span>Context switches</span><span class="stat-icon stat-pink" aria-hidden="true">⇄</span></div><strong id="switchesStat" class="stat-value">0</strong><small>task changes</small></article>
+              <article class="stat-card"><div class="stat-top"><span>Schedulability</span><span class="stat-icon stat-green" aria-hidden="true">✓</span></div><strong id="schedulableStat" class="stat-value stat-value-small">Not applicable</strong><small id="schedulabilityNote">policy analysis</small></article>
+            </div>
+
+            <section class="surface chart-surface" aria-labelledby="gantt-heading"><div class="section-heading"><div><p class="eyebrow">CPU timeline</p><h2 id="gantt-heading">Execution Gantt</h2></div><label class="zoom-control"><span>Zoom</span><input id="zoomSlider" type="range" min="8" max="38" value="18" aria-label="Gantt zoom" /></label></div><div class="gantt-viewport" id="ganttContainer"><div class="empty-state"><span class="empty-mark">↗</span><p>Run a simulation to see results</p></div></div><div class="gantt-legend" id="ganttLegend"></div><div class="playback-bar"><div class="playback-buttons"><button id="playButton" class="icon-button" type="button" aria-label="Play schedule" title="Play (Space)">▶</button><button id="stepButton" class="icon-button" type="button" aria-label="Step forward" title="Step one tick">▸|</button><button id="restartButton" class="icon-button" type="button" aria-label="Restart playback" title="Restart playback">↺</button><label class="speed-control">Speed<select id="playbackSpeed" aria-label="Playback speed"><option value="1000">0.5×</option><option value="500" selected>1×</option><option value="250">2×</option><option value="125">4×</option></select></label></div><label class="scrub-control"><span id="currentTickLabel">Tick 0</span><input id="playbackSlider" type="range" min="0" max="0" value="0" aria-label="Schedule playback tick" /></label><div class="tick-inspector" id="tickInspector"><strong>Ready queue</strong><span id="runningTaskValue">No run loaded</span><small id="readyQueueValue">Ready: — · Mutex: —</small></div></div></section>
+
+            <div class="lower-grid"><section class="surface" aria-labelledby="task-metrics-heading"><div class="section-heading compact-heading"><div><p class="eyebrow">Per task</p><h2 id="task-metrics-heading">Response metrics</h2></div></div><div class="table-scroll"><table class="data-table metrics-table"><thead><tr><th>Task</th><th>Misses</th><th>Average response</th><th>Worst response</th></tr></thead><tbody id="taskMetricsBody"></tbody></table></div></section><section class="surface event-surface" aria-labelledby="event-heading"><div class="section-heading compact-heading"><div><p class="eyebrow">Trace</p><h2 id="event-heading">Event log <span id="eventCount" class="count-chip">0</span></h2></div></div><div id="eventFilters" class="filter-chips" role="group" aria-label="Filter event types"></div><div id="eventLog" class="event-log"><div class="empty-state small-empty">No events recorded</div></div></section></div>
+          </section>
+        </section>
+
+        <section id="panel-compare" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-compare">
+          <section class="surface compare-controls editor-only"><div class="section-heading"><div><p class="eyebrow">Policy analysis</p><h1>Compare schedulers</h1></div><button class="button button-primary" id="compareButton" type="button"><span class="button-spinner" aria-hidden="true"></span><span class="button-label">Run comparison</span><span aria-hidden="true">→</span></button></div><div class="compare-shortcuts"><button class="text-button" id="selectAllAlgorithms" type="button">Select all</button><button class="text-button" id="selectRealtimeAlgorithms" type="button">Real-time only</button><button class="text-button" id="clearAlgorithms" type="button">Clear</button></div><div id="algorithmChecks" class="algorithm-groups"></div><div id="compareError" class="notice notice-error hidden" role="alert"></div></section>
+          <div id="compareResults" class="compare-results hidden"><section class="surface"><div class="section-heading"><div><p class="eyebrow">At a glance</p><h2>Algorithm results</h2></div></div><div class="table-scroll"><table id="compareTable" class="data-table compare-table"><thead><tr><th><button data-sort="algorithm" class="sort-button">Algorithm ↕</button></th><th><button data-sort="deadline_misses" class="sort-button">Misses ↕</button></th><th><button data-sort="deadline_miss_ratio" class="sort-button">Miss ratio ↕</button></th><th><button data-sort="cpu_utilization" class="sort-button">CPU util. ↕</button></th><th><button data-sort="context_switches" class="sort-button">Switches ↕</button></th><th><button data-sort="average_response_time" class="sort-button">Avg response ↕</button></th><th>Schedulability</th></tr></thead><tbody></tbody></table></div></section><section class="surface"><div class="section-heading"><div><p class="eyebrow">Deadline performance</p><h2>Misses by policy</h2></div></div><div id="compareChart" class="compare-chart"></div></section><section class="surface"><div class="section-heading"><div><p class="eyebrow">Execution detail</p><h2>Algorithm timelines</h2></div></div><div id="compareTimelines" class="timeline-accordions"></div></section></div>
+        </section>
+
+        <section id="panel-demo" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-demo">
+          <section class="surface demo-controls editor-only"><div class="section-heading"><div><p class="eyebrow">Synchronization lab</p><h1>Priority inversion</h1></div><div class="toolbar-actions"><label class="field demo-select"><span>Scheduling policy</span><select id="demoAlgorithm"><option value="PRIORITY_P">Priority preemptive</option><option value="PRIORITY_NP">Priority non-preemptive</option><option value="PRIORITY_AGING">Priority with aging</option><option value="RM">Rate-Monotonic</option></select></label><button class="button button-primary" id="demoButton" type="button"><span class="button-spinner" aria-hidden="true"></span><span class="button-label">Run demo</span><span aria-hidden="true">→</span></button></div></div><div id="demoError" class="notice notice-error hidden" role="alert"></div></section>
+          <div id="demoResults" class="demo-results hidden"><div class="demo-outcome" id="demoResultLine">Emergency Braking: MISSED → MET</div><div class="demo-charts"><section class="surface demo-chart-surface"><div class="section-heading compact-heading"><div><p class="eyebrow">Inheritance disabled</p><h2>Without priority inheritance</h2></div></div><div id="demoWithoutChart" class="gantt-viewport"></div></section><section class="surface demo-chart-surface"><div class="section-heading compact-heading"><div><p class="eyebrow">Inheritance enabled</p><h2>With priority inheritance</h2></div></div><div id="demoWithChart" class="gantt-viewport"></div></section></div><div class="demo-playback"><button id="demoPlayButton" class="icon-button" type="button" aria-label="Play synchronized demo">▶</button><button id="demoStepButton" class="icon-button" type="button" aria-label="Step demo">▸|</button><label class="scrub-control"><span id="demoTickLabel">Tick 0</span><input id="demoPlaybackSlider" type="range" min="0" max="24" value="0" aria-label="Priority inversion playback tick" /></label></div><section class="surface inversion-explainer"><div class="section-heading compact-heading"><div><p class="eyebrow">What happens</p><h2>Four steps to inversion</h2></div></div><div class="explanation-steps" id="explanationSteps"><article data-step="1"><b>01</b><div><strong>Low-priority task locks SensorBus</strong><p>Infotainment enters its critical section first.</p></div></article><article data-step="2"><b>02</b><div><strong>Safety task requests the same mutex</strong><p>Emergency Braking blocks until the bus is released.</p></div></article><article data-step="3"><b>03</b><div><strong>Medium-priority work delays the owner</strong><p>Lane Detection can run while the high-priority job waits.</p></div></article><article data-step="4"><b>04</b><div><strong>Inheritance raises the owner's urgency</strong><p>Infotainment runs sooner and hands SensorBus to the waiting safety task.</p></div></article></div><p class="inversion-interval hidden" id="inversionInterval"></p></section></div>
+        </section>
+
+        <section id="panel-about" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-about">
+          <section class="surface novelty-surface"><p class="eyebrow">Project novelty</p><h1>Schedulers meet a safety-critical workload.</h1><p>AutoRT-Sim applies classic CPU scheduling algorithms and real-time schedulers to a safety-critical autonomous-driving workload, shows how general-purpose schedulers can miss deadlines of critical tasks, and demonstrates priority inversion through a shared mutex and its fix with priority inheritance.</p></section>
+          <section class="group-explanations" id="aboutGroups"></section>
+          <section class="surface architecture-surface"><div class="section-heading"><div><p class="eyebrow">System design</p><h2>One scheduler, three layers</h2></div></div><svg class="architecture-diagram" viewBox="0 0 900 190" role="img" aria-label="Browser frontend sends requests to FastAPI, which invokes the core scheduling simulator"><defs><marker id="arch-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 8 4 0 8z" fill="#22d3ee"/></marker></defs><rect x="28" y="38" width="224" height="112" rx="14"/><rect x="338" y="38" width="224" height="112" rx="14"/><rect x="648" y="38" width="224" height="112" rx="14"/><path d="M252 94h74m236 0h74" marker-end="url(#arch-arrow)"/><text x="140" y="81" text-anchor="middle">Browser dashboard</text><text x="140" y="109" text-anchor="middle" class="arch-sub">Vanilla JS · SVG</text><text x="450" y="81" text-anchor="middle">FastAPI</text><text x="450" y="109" text-anchor="middle" class="arch-sub">Validated JSON API</text><text x="760" y="81" text-anchor="middle">Core simulator</text><text x="760" y="109" text-anchor="middle" class="arch-sub">Schedulers · mutex · metrics</text></svg></section>
+          <section class="surface syllabus-surface"><div class="section-heading"><div><p class="eyebrow">Course alignment</p><h2>Syllabus mapping</h2></div></div><div class="syllabus-grid"><article><b>Module 3</b><strong>CPU scheduling</strong><p>Compare ordering rules, preemption, response time, and context switches.</p></article><article><b>Module 4</b><strong>Mutex and synchronization</strong><p>Observe resource ownership, blocking, handoff, and priority inheritance.</p></article><article><b>Module 8</b><strong>Real-time and vehicular systems</strong><p>Evaluate periodic jobs and deadline behavior in an autonomous-driving workload.</p></article></div></section>
+        </section>
+      </main>
+      <footer class="app-footer"><span>AutoRT-Sim</span><span>Keyboard: <kbd>R</kbd> run · <kbd>Space</kbd> play · <kbd>1</kbd>–<kbd>4</kbd> tabs <button class="help-trigger" title="R runs the simulation; Space toggles playback; 1–4 switch tabs" aria-label="Keyboard shortcuts help">?</button></span></footer>
+    </div>
+    <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <div id="tooltip" class="chart-tooltip hidden" role="tooltip"></div>
+  </body>
+</html>
